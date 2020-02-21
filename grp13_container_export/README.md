@@ -50,7 +50,7 @@ dicom:
       hashuid: true
 ```
 
-__Extended Template Functionality:__ Three additional options have been introduced for this gear
+__Extended Template Functionality:__ Additional options have been introduced for this gear
 (still unreleased for CLI):
 
 1. Per GRP-13-03, the header tag can be referenced in a by tag location
@@ -83,11 +83,62 @@ as below:
           replace-with: 'new SH value'
         - name: AnatomicRegionSequence.0.00080104
           remove: true
+        - name: AnatomicRegionSequence.*.CodeValue
+          replace-with: 'new SH value'
 
     ```
-    [migration_toolkit changes](https://gitlab.com/flywheel-io/public/migration-toolkit/merge_requests/40/diffs)
+    [migration_toolkit changes](https://gitlab.com/flywheel-io/public/migration-toolkit/merge_requests/40/diffs)  
+    In the last field example, the wildcard character will be expanded to 
+    all matching index.
 
-3. The `export` namepace can be used to whitelist metadata fields for
+3. Per GRP-13-13, filename can be modified given a user defined pattern
+captured in the filenames namespace of the yml template. Example:
+
+    ```yaml
+    dicom:
+      date-increment: -17
+      filenames:
+        - output: '{SOPInstanceUID}_{regdate}.dcm'
+          input-regex: '^(?P<notused>\w+)-(?P<regdate>\d{4}-\d{2}-\d{2}).dcm$'
+          groups:
+            - name: date
+              increment-date: true
+        - output: '{filenameuid}_{regdatetime}.dcm'
+          input-regex: '^(?P<filenameuid>[\w.]+)-(?P<regdatetime>[\d\s:-]+).dcm$'
+          groups:
+            - name: filenameuid
+              hashuid: true
+            - name: datetime
+              increment-datetime: true
+      fields:
+        ...
+    ```
+   In this example, a file matching the first `input-regex` (e.g. acquisition-2020-02-20.dcm) 
+   will be saved as `1.2.840.113619.2.408.5282380.5220731_2020-02-03.dcm`, matching the
+   `output` specification:
+    * `SOPInstanceUID` is replaced by the corresponding Dicom keyword
+    * `regdate` is replaced by the `regdate` group extracted from regex match defined
+    by `input-regex` and processed by the action listed under `groups` 
+    (e.g. incremented by `date-increment`).
+   If multiple `input-regex` match the filename, the first match in the `filenames` list 
+   gets precedence.
+   
+4. Per GRP-13-08, hashing of UID can be made compliant by providing a registered
+   root IOD. For using Flywheel ANSI registered IOD, use 2.16.840.1.114570.2.2 *[SUBDOMAIN-TO-BE-CONFIRMED]* 
+   Root OID are defined in the yml template using `uid_prefix_fields` and `uid_numeric_name` keys. 
+   Example:
+   ```yaml
+   dicom:
+     uid_prefix_fields: 7
+     uid_numeric_name: 2.16.840.1.114570.2.2 [SUBDOMAIN-TO-BE-CONFIRMED] 
+     fields:
+        - name: ConcatenationUID
+          hashuid: true       
+   ``` 
+   `uid_prefix_fields` defines the number of blocks to keep when hashing the UID. When
+   `uid_numeric_name` is provided, it must match the number of blocks in defined in `uid_numeric_name`.
+
+6. The `export` namespace can be used to whitelist metadata fields for
 propagation where `info` is specifically for container.info fields and
 `metadata` is a list for metadata that appear flat on the container
 for example, subject.sex. This is demonstrated below:
@@ -134,7 +185,87 @@ for example, subject.sex. This is demonstrated below:
     }
     ```
     
+7. De-identification of JPG is supported with same action on fields as Dicom. 
+Field name must match keyword names defined by piexif (full list available 
+[here](https://github.com/hMatoba/Piexif/blob/master/piexif/_exif.py)). A few additional
+attributes can be specified: `remove-gps: true` to remove all GPS metadata and
+`remove-exif` to remove the whole EXIF ImageFileDirectory block. Example:
+    ```yaml
+   jpg: 
+      date-increment: -17
+      remove-gps: true
+      fields:
+        - name: DateTime
+          increment-datetime: true
+        - name: Artist
+          remove: true
+        - name: DateTimeOriginal
+          increment-datetime: true
+        - name: PreviewDateTime
+          remove: true
+        - name: DateTimeDigitized
+          increment-datetime: true
+        - name: CameraOwnerName
+          replace-with: 'REDACTED'
+        - name: ImageUniqueID
+          hash: true
+   ```
    
+8. De-identification of TIFF is supported with same action on fields as Dicom.
+Field name must match keyword names as defined Pillow (full list of keyword can be seen 
+[here](https://github.com/python-pillow/Pillow/blob/4.1.x/PIL/TiffTags.py#L67)). A few additional
+attributes can be specified: `remove-private-tags: true` to remove all private tags (i.e.
+tag index >= 32768) . Example:
+    ```yaml
+    tiff:
+      date-increment: -17
+      remove-private-tags: True
+      fields:
+        - name: DateTime
+          increment-datetime: true
+        - name: Software
+          remove: true
+        - name: Model
+          replace-with: 'REDACTED'
+    ``` 
+
+9. De-identification of XML is supported with same action on fields as Dicom.
+Field name must use [XPath](https://en.wikipedia.org/wiki/XPath) to specify the DOM element 
+in the tree. If XPath return multiple elements, each element will be processed with the
+specified action. Example:
+    ```yaml
+    xml:
+      date-increment: -17
+      fields:
+        - name: /Patient/Patient_Date_Of_Birth
+          replace-with: '1900-01-01'
+        - name: /Patient/Patient_Name
+          remove: true
+        - name: /Patient/SUBJECT_ID
+          hash: true
+        - name: /Patient/Visit/Scan/ScanTime
+          increment-datetime: true
+    ```
+    In the above example, if the last field name XPath (`/Patient/Visit/Scan/ScanTime`) 
+    matches multiple elements (i.e /Patient/Visit[1]/Scan[1]/ScanTime, 
+    /Patient/Visit[2]/Scan[1]/ScanTime  
+    and /Patient/Visit[1]/Scan[2]/ScanTime), each
+    element will be processed with the specified action. 
+    
+10. De-identification of PNG is supported with remove action only.
+Field name can match any metadata chunks. To remove all private chunks the following
+attributes can be specified: `remove-private-chunks: true` (more on public and private
+chunks [here](https://en.wikipedia.org/wiki/Portable_Network_Graphics)). Example:
+    ```yaml
+    png:
+      remove-private-chunks: True
+      fields:
+        - name: tEXt
+          remove: true
+        - name: eXIf
+          remove: true
+    ``` 
+
 
 ### subject_csv (optional)
 The subject_csv facilitates subject-specific configuration of 
