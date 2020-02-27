@@ -89,7 +89,7 @@ as below:
     ```
     [migration_toolkit changes](https://gitlab.com/flywheel-io/public/migration-toolkit/merge_requests/40/diffs)  
     In the last field example, the wildcard character will be expanded to 
-    all matching index.
+    all matching indices.
 
 3. Per GRP-13-13, filename can be modified given a user defined pattern
 captured in the filenames namespace of the yml template. Example:
@@ -123,20 +123,23 @@ captured in the filenames namespace of the yml template. Example:
    If multiple `input-regex` match the filename, the first match in the `filenames` list 
    gets precedence.
    
-4. Per GRP-13-08, hashing of UID can be made compliant by providing a registered
-   root IOD. For using Flywheel ANSI registered IOD, use 2.16.840.1.114570.2.2 *[SUBDOMAIN-TO-BE-CONFIRMED]* 
-   Root OID are defined in the yml template using `uid_prefix_fields` and `uid_numeric_name` keys. 
+4. Per GRP-13-08, UID can be hashed. UID will be generated with a defined root IOD as prefix if
+   `uid_numeric_name` is specified. If no root IOD (`uid_numeric_name`) is provided, the 
+   original uid prefix is preserved. Number of prefix groups to preserved in the original UID is defined by 
+   `uid_prefix_fields` (default=4). For using Flywheel ANSI registered IOD, you can use 
+   `uid_numeric_name=2.16.840.1.114570.2.2`.
+   
    Example:
    ```yaml
    dicom:
      uid_prefix_fields: 7
-     uid_numeric_name: 2.16.840.1.114570.2.2 [SUBDOMAIN-TO-BE-CONFIRMED] 
+     uid_numeric_name: 2.16.840.1.114570.2.2 
      fields:
         - name: ConcatenationUID
           hashuid: true       
    ``` 
-   `uid_prefix_fields` defines the number of blocks to keep when hashing the UID. When
-   `uid_numeric_name` is provided, it must match the number of blocks in defined in `uid_numeric_name`.
+    Note: when `uid_numeric_name` is provided, it must match the number of blocks defined
+     by `uid_prefix_fields`.
 
 6. The `export` namespace can be used to whitelist metadata fields for
 propagation where `info` is specifically for container.info fields and
