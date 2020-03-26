@@ -101,14 +101,14 @@ captured in the filenames namespace of the yml template. Example:
         - output: '{SOPInstanceUID}_{regdate}.dcm'
           input-regex: '^(?P<notused>\w+)-(?P<regdate>\d{4}-\d{2}-\d{2}).dcm$'
           groups:
-            - name: date
+            - name: regdate
               increment-date: true
         - output: '{filenameuid}_{regdatetime}.dcm'
           input-regex: '^(?P<filenameuid>[\w.]+)-(?P<regdatetime>[\d\s:-]+).dcm$'
           groups:
             - name: filenameuid
               hashuid: true
-            - name: datetime
+            - name: regdatetime
               increment-datetime: true
       fields:
         ...
